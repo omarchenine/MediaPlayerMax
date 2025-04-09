@@ -1,0 +1,15 @@
+#!/bin/bash
+
+# Get the directory where this script is located
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+# Navigate to the app Contents directory
+APP_DIR="$SCRIPT_DIR/.."
+# Get the Resources directory
+RESOURCES_DIR="$APP_DIR/Resources"
+
+# Set VLC library path for macOS
+export JNA_LIBRARY_PATH=/Applications/VLC.app/Contents/MacOS/lib
+export DYLD_LIBRARY_PATH=/Applications/VLC.app/Contents/MacOS/lib
+
+# Run the JAR with the VLC path set
+java -Djna.library.path=/Applications/VLC.app/Contents/MacOS/lib -jar "$RESOURCES_DIR/audio-player-1.0-SNAPSHOT-jar-with-dependencies.jar" 
