@@ -83,24 +83,24 @@ public class MediaPlayerManager {
             }
             
             // Create factory with minimal options
-        factory = new MediaPlayerFactory();
+            factory = new MediaPlayerFactory();
             
             // Directly create an embedded media player instead of using the component
-        mediaPlayer = factory.mediaPlayers().newEmbeddedMediaPlayer();
-        
+            mediaPlayer = factory.mediaPlayers().newEmbeddedMediaPlayer();
+            
             LOGGER.info("MediaPlayerManager initialized with VLC version: " + 
                         factory.application().version());
             
             // Add event handler for playback events
-        mediaPlayer.events().addMediaPlayerEventListener(new MediaPlayerEventAdapter() {
-            @Override
-            public void finished(MediaPlayer mediaPlayer) {
-                if (eventListener != null) {
-                    eventListener.onPlaybackComplete();
+            mediaPlayer.events().addMediaPlayerEventListener(new MediaPlayerEventAdapter() {
+                @Override
+                public void finished(MediaPlayer mediaPlayer) {
+                    if (eventListener != null) {
+                        eventListener.onPlaybackComplete();
+                    }
                 }
-            }
-            
-            @Override
+                
+                @Override
                 public void timeChanged(MediaPlayer mediaPlayer, long newTime) {
                     if (eventListener != null) {
                         eventListener.onTimeChanged(newTime);
@@ -112,18 +112,18 @@ public class MediaPlayerManager {
                     if (eventListener != null) {
                         eventListener.onPlay();
                     }
-            }
-            
-            @Override
+                }
+                
+                @Override
                 public void paused(MediaPlayer mediaPlayer) {
                     if (eventListener != null) {
                         eventListener.onPause();
                     }
-            }
-            
-            @Override
+                }
+                
+                @Override
                 public void stopped(MediaPlayer mediaPlayer) {
-                if (eventListener != null) {
+                    if (eventListener != null) {
                         eventListener.onStop();
                     }
                 }
@@ -132,9 +132,9 @@ public class MediaPlayerManager {
                 public void error(MediaPlayer mediaPlayer) {
                     if (eventListener != null) {
                         eventListener.onError();
+                    }
                 }
-            }
-        });
+            });
         } catch (UnsatisfiedLinkError e) {
             // VLC libraries not found
             LOGGER.severe("VLC libraries not found. Video playback will be disabled: " + e.getMessage());
@@ -214,9 +214,6 @@ public class MediaPlayerManager {
             frameImage = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
             imageBuffer = ((DataBufferInt) frameImage.getRaster().getDataBuffer()).getData();
             
-            // Override the canvas paint method to draw our frame image
-            canvas.getGraphics();  // Ensure the canvas has a graphics context
-            
             // Setup callbacks
             BufferFormatCallback bufferFormatCallback = new BufferFormatCallback() {
                 @Override
@@ -241,6 +238,10 @@ public class MediaPlayerManager {
             RenderCallback renderCallback = new RenderCallback() {
                 @Override
                 public void display(MediaPlayer mediaPlayer, ByteBuffer[] nativeBuffers, BufferFormat bufferFormat) {
+                    if (nativeBuffers.length == 0 || nativeBuffers[0] == null) {
+                        return;
+                    }
+                    
                     // Copy the video data from native buffer to the image
                     ByteBuffer byteBuffer = nativeBuffers[0];
                     byteBuffer.asIntBuffer().get(imageBuffer, 0, imageBuffer.length);
@@ -260,7 +261,7 @@ public class MediaPlayerManager {
             CallbackVideoSurface videoSurface = factory.videoSurfaces().newVideoSurface(
                 bufferFormatCallback, renderCallback, true);
             
-        mediaPlayer.videoSurface().set(videoSurface);
+            mediaPlayer.videoSurface().set(videoSurface);
             this.vlcVideoSurface = videoSurface;
             
             LOGGER.info("Direct rendering video surface successfully set up");
@@ -341,59 +342,45 @@ public class MediaPlayerManager {
     }
     
     /**
-     * Starts or resumes playback of the current media file.
+     * Starts or resumes playback.
      */
     public void play() {
-        if (!isMediaPlayerAvailable()) {
-            LOGGER.warning("Cannot play: Media player not available (VLC libraries missing)");
-            return;
-        }
-        
-        if (mediaPlayer == null || currentFile == null) {
-            LOGGER.warning("Cannot play: No media loaded");
-            return;
-        }
-        
-        try {
-            // For video files, make sure the video surface is attached before playing
-            if (isVideo && videoSurface != null) {
-                LOGGER.info("Playing video file, checking video surface");
-                
-                // Make sure component is visible
-                videoSurface.setVisible(true);
-                
-                // Try to attach video surface if not already attached
-                if (vlcVideoSurface == null) {
-                    LOGGER.info("No video surface attached yet, attempting to attach");
-                    setupDirectRendering(videoSurface);
+        if (mediaPlayer != null && mediaPlayer.status().isPlayable()) {
+            try {
+                // For video files, ensure we're at the correct frame
+                if (isVideo && mediaPlayer.status().time() > 0) {
+                    long currentTime = mediaPlayer.status().time();
+                    mediaPlayer.controls().setTime(currentTime);
                 }
-            }
-            
-            // Start playback
-            mediaPlayer.controls().play();
-            if (eventListener != null) {
-                eventListener.onPlay();
-            }
-            LOGGER.info("Playback started");
-        } catch (Exception e) {
-            LOGGER.log(Level.SEVERE, "Error during playback", e);
-            if (eventListener != null) {
-                eventListener.onError();
+                
+                mediaPlayer.controls().play();
+                if (eventListener != null) {
+                    eventListener.onPlay();
+                }
+                LOGGER.info("Playback started/resumed");
+            } catch (Exception e) {
+                LOGGER.log(Level.WARNING, "Error starting/resuming playback", e);
+                if (eventListener != null) {
+                    eventListener.onError();
+                }
             }
         }
     }
     
     /**
-     * Pauses playback.
+     * Pauses the current playback.
      */
     public void pause() {
-        if (!isMediaPlayerAvailable()) {
-            return;
-        }
-        
-        if (mediaPlayer != null) {
-            mediaPlayer.controls().pause();
-            LOGGER.info("Playback paused");
+        if (mediaPlayer != null && mediaPlayer.status().isPlayable()) {
+            try {
+                mediaPlayer.controls().pause();
+                if (eventListener != null) {
+                    eventListener.onPause();
+                }
+                LOGGER.info("Playback paused");
+            } catch (Exception e) {
+                LOGGER.log(Level.WARNING, "Error pausing playback", e);
+            }
         }
     }
     
@@ -406,8 +393,8 @@ public class MediaPlayerManager {
         }
         
         if (mediaPlayer != null) {
-        mediaPlayer.controls().stop();
-        LOGGER.info("Playback stopped");
+            mediaPlayer.controls().stop();
+            LOGGER.info("Playback stopped");
         }
     }
     
